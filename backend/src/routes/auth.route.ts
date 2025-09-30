@@ -1,8 +1,8 @@
 import express, { Router } from 'express';
 import { login } from '../controllers/auth.controller.js';
 
-const rotuer: Router = express.Router();
+const router: Router = express.Router(); // ✅ fix spelling
 
-rotuer.post('/login', login);
+router.post('/login', login);
 
-export default rotuer;
+export default router;

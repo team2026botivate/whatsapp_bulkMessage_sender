@@ -1,9 +1,9 @@
 import express, { Router } from 'express';
 import { getWhatsappTemplates, whatsappSendTemplateMessage } from '../controllers/whatsapp.messages.controller.js';
 
-const rotuer: Router = express.Router();
+const router: Router = express.Router(); // ✅ fix spelling
 
-rotuer.post('/template-message', whatsappSendTemplateMessage);
-rotuer.get('/templates', getWhatsappTemplates);
+router.post('/template-message', whatsappSendTemplateMessage);
+router.get('/templates', getWhatsappTemplates);
 
-export default rotuer;
+export default router;
