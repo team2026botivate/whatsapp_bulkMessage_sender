@@ -3,8 +3,12 @@ import { Request, Response } from "express";
 export const login = (req: Request, res: Response) => {
   const { email, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ success: false, message: "Email and password are required" });
+  if (!email ) {
+    return res.status(400).json({ success: false, message: " password are required" });
+  }
+
+  if (!password ) {
+    return res.status(400).json({ success: false, message: " password are required" });
   }
 
   if (
