@@ -30,14 +30,9 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
 // Middleware to handle CORS
 app.use(
   cors({
-    origin: (origin, callback) => {
-      const normalized = origin ? normalizeOrigin(origin) : '';
-      if (!origin || allowedOrigins.includes(normalized)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
+    // Allow all origins by reflecting the request Origin header
+    // This is compatible with credentials: true
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
