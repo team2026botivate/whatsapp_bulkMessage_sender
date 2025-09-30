@@ -18,6 +18,9 @@ app.use(
   cors({
     origin: allowedOrigins as string[],
     credentials: true,
+    exposedHeaders: ["auth-token"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "auth-token"],
   })
 );
 const port = process.env.PORT || 3002;
