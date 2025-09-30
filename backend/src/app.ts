@@ -9,20 +9,31 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins =
-  process.env.NODE_ENV === "production"
-    ? [process.env.FRONT_END_URL as string] // sirf prod URL allow
-    : ["http://localhost:3000"];  // dev ke liye  
+const allowedOrigins = process.env.NODE_ENV === "production"
+  ? [process.env.FRONT_END_URL as string]
+  : ["http://localhost:3000"];
 
 app.use(
   cors({
-    origin: allowedOrigins as string[],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+      else callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
-    exposedHeaders: ["auth-token"],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "auth-token"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // allow preflight
   })
 );
+
+// Handle OPTIONS requests globally
+app.options("*", cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+    else callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+}));
+
 const port = process.env.PORT || 3002;
 app.use(express.json());
 app.use(cookieParser());
