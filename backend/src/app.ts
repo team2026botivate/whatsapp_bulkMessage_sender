@@ -21,6 +21,9 @@ app.use(cookieParser());
 
 app.use('/api/messages', whatsappRoute);
 app.use('/api/auth', authRoute);
+app.get('/', (req, res) => {
+  res.json({ success: true , message:"Server is running"});
+});
 
 
 app.listen(port, () => {

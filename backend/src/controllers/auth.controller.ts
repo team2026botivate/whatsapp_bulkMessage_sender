@@ -9,7 +9,7 @@ export const login = (req: Request, res: Response) => {
 
   if (
     email === 'satyendratandan3921@gmail.com' &&
-    password === 'satyendra@botivate.in@88715 27519'
+    password === 'satyendra@botivate.in@8871527519'
   ) {
     res
       .cookie('auth-token', 'qwertyuiopasdfghjkl;zxcvbnm,./', {
