@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 
 export const login = (req: Request, res: Response) => {
   const { email, password } = req.body;
-  console.log(email, password);
 
   if (!email || !password) {
     return res.status(400).json({ success: false, message: 'Email and password are required' });
