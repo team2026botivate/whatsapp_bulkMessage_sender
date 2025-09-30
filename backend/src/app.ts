@@ -10,29 +10,46 @@ dotenv.config();
 const app = express();
 
 // Allowed frontend origins
+const normalizeOrigin = (s: string) => s.trim().replace(/\/$/, '').toLowerCase();
 const envOrigins = (process.env.FRONT_END_URLS || process.env.FRONT_END_URL || '')
   .split(',')
   .map((s) => s.trim())
-  .filter(Boolean);
+  .filter(Boolean)
+  .map(normalizeOrigin);
+
+// Fallback defaults for production if env not set
+const defaultProdOrigins = [
+  'https://whatsapp-bulk-message-sender-brown.vercel.app',
+  'https://whatsapp-bulk-message-sender-26ome4p8k.vercel.app',
+].map(normalizeOrigin);
 
 const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? envOrigins // production (set FRONT_END_URL or FRONT_END_URLS as comma-separated list)
+  ? (envOrigins.length ? envOrigins : defaultProdOrigins)
   : ['http://localhost:3000']; // development
 
 // Middleware to handle CORS
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      const normalized = origin ? normalizeOrigin(origin) : '';
+      if (!origin || allowedOrigins.includes(normalized)) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        callback(new Error('Not allowed by CORS'));
       }
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204,
   })
 );
+
+// Ensure caches respect per-origin responses
+app.use((req, res, next) => {
+  res.header('Vary', 'Origin');
+  next();
+});
 
 // Note: Explicit catch-all OPTIONS handler not needed; cors() above handles preflight in Express 5
 
