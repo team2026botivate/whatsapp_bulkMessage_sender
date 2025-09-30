@@ -29,15 +29,7 @@ app.use(
   })
 );
 
-// Handle OPTIONS requests for all routes
-app.options('(.*)', cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-    else callback(new Error("Not allowed by CORS"));
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-}));
+// Note: Explicit catch-all OPTIONS handler not needed; cors() above handles preflight in Express 5
 
 // Parse JSON and cookies
 app.use(express.json());
