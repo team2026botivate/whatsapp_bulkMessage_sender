@@ -10,9 +10,14 @@ dotenv.config();
 const app = express();
 
 // Allowed frontend origins
-const allowedOrigins = process.env.NODE_ENV === "production"
-  ? [process.env.FRONT_END_URL as string] // production
-  : ["http://localhost:3000"];           // development
+const envOrigins = (process.env.FRONT_END_URLS || process.env.FRONT_END_URL || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? envOrigins // production (set FRONT_END_URL or FRONT_END_URLS as comma-separated list)
+  : ['http://localhost:3000']; // development
 
 // Middleware to handle CORS
 app.use(
