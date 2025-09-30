@@ -9,9 +9,14 @@ dotenv.config();
 
 const app = express();
 
+const allowedOrigins =
+  process.env.NODE_ENV === "production"
+    ? [process.env.FRONT_END_URL as string] // sirf prod URL allow
+    : ["http://localhost:3000"];  // dev ke liye  
+
 app.use(
   cors({
-    origin: process.env.FRONT_END_URL,
+    origin: allowedOrigins as string[],
     credentials: true,
   })
 );
