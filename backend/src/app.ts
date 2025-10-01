@@ -32,11 +32,12 @@ const allowedOrigins =
       : defaultProdOrigins
     : ['http://localhost:3000']; // development
 
-// Middleware to handle CORS
-app.use(
+
+  console.log(allowedOrigins,"form app.js")
+    app.use(
   cors({
     // Only allow known frontend origins
-    origin: allowedOrigins,
+    origin:true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

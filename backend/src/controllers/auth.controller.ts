@@ -23,7 +23,6 @@ export const login = (req: Request, res: Response) => {
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 24 * 60 * 60 * 1000,
         path: '/',
-        // Optionally set a cookie domain in production, e.g. ".yourdomain.com"
         ...(process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN
           ? { domain: process.env.COOKIE_DOMAIN }
           : {}),
