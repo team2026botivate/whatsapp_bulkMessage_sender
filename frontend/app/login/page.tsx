@@ -38,7 +38,7 @@ function App() {
         }
       );
 
-
+      console.log(res,"res");
       const data = await res.json();
 
       console.log(data,'DATA');
@@ -50,6 +50,7 @@ function App() {
         toast.error(data.message);
       }
     } catch (error) {
+      
       if (error instanceof Error) {
         toast.error(error.message);
       }

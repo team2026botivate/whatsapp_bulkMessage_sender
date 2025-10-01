@@ -23,6 +23,8 @@ const envOrigins = (process.env.FRONT_END_URLS || process.env.FRONT_END_URL || '
 const defaultProdOrigins = [
   'https://whatsapp-bulk-message-sender-brown.vercel.app',
   'https://whatsapp-bulk-message-sender-26ome4p8k.vercel.app',
+  "https://whatsapp-bulk-message-sender-brown.vercel.app/login",
+
 ].map(normalizeOrigin);
 
 const allowedOrigins =
@@ -33,11 +35,18 @@ const allowedOrigins =
     : ['http://localhost:3000']; // development
 
 
-  console.log(allowedOrigins,"form app.js")
-    app.use(
+console.log('Allowed CORS origins:', allowedOrigins);
+app.use(
   cors({
     // Only allow known frontend origins
-    origin:true,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // allow non-browser tools
+      const normalized = normalizeOrigin(origin);
+      const allowed = allowedOrigins.includes(normalized);
+      if (allowed) return callback(null, true);
+      // Do not error; respond without CORS headers so browser blocks instead of 500
+      return callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -57,6 +66,15 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(cookieParser());
 
+// Basic request logger for auth endpoints (must be before the route)
+app.use('/api/auth', (req, _res, next) => {
+  console.log(`[AUTH] ${req.method} ${req.originalUrl}`, {
+    origin: req.headers.origin,
+    cookies: Object.keys(req.cookies || {}),
+  });
+  next();
+});
+
 // Routes
 app.use('/api/messages', whatsappRoute);
 app.use('/api/auth', authRoute);
@@ -64,6 +82,14 @@ app.use('/api/auth', authRoute);
 // Test route
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'Server is running' });
+});
+
+// Global error handler
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('Unhandled error:', err);
+  const status = err.status || 500;
+  res.status(status).json({ success: false, message: err.message || 'Internal Server Error' });
 });
 
 // Start server
