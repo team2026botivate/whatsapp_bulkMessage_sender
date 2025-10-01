@@ -96,6 +96,8 @@ const page: React.FC = () => {
     ? (_rawT.data as TemplatesType[])
     : [];
 
+    console.log(templatesData,)
+
   const [messageData, setMessageData] = useState<{
     contacts: Contact[];
     templateId: string;
@@ -109,10 +111,7 @@ const page: React.FC = () => {
 
 
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [isLoadingTemplates] = useState(false);
-  const [messageMode, setMessageMode] = useState<"template" | "composer">(
-    "template" // Changed default to template since composer is removed
-  );
+  
 
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
