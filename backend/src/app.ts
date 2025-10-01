@@ -26,12 +26,14 @@ const defaultProdOrigins = [
 
 ].map(normalizeOrigin);
 
-const allowedOrigins =
-  process.env.NODE_ENV === 'production'
-    ? envOrigins.length
-      ? envOrigins
-      : defaultProdOrigins
-    : ['http://localhost:3000']; // development
+// Build a union of env-provided, defaults, and localhost (do not rely solely on NODE_ENV)
+const allowedOrigins = Array.from(
+  new Set([
+    ...defaultProdOrigins,
+    ...envOrigins,
+    normalizeOrigin('http://localhost:3000'),
+  ])
+);
 
 
 console.log('Allowed CORS origins:', allowedOrigins);
