@@ -22,6 +22,11 @@ export const login = (req: Request, res: Response) => {
         secure: process.env.NODE_ENV === 'production', // HTTPS required
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 24 * 60 * 60 * 1000,
+        path: '/',
+        // Optionally set a cookie domain in production, e.g. ".yourdomain.com"
+        ...(process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN
+          ? { domain: process.env.COOKIE_DOMAIN }
+          : {}),
       })
       .status(200)
       .json({ success: true, message: 'Login successful' });

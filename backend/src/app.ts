@@ -8,6 +8,8 @@ import cors from 'cors';
 dotenv.config();
 
 const app = express();
+// Trust first proxy (needed for secure cookies behind proxies/CDNs)
+app.set('trust proxy', 1);
 
 // Allowed frontend origins
 const normalizeOrigin = (s: string) => s.trim().replace(/\/$/, '').toLowerCase();
@@ -23,16 +25,18 @@ const defaultProdOrigins = [
   'https://whatsapp-bulk-message-sender-26ome4p8k.vercel.app',
 ].map(normalizeOrigin);
 
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? (envOrigins.length ? envOrigins : defaultProdOrigins)
-  : ['http://localhost:3000']; // development
+const allowedOrigins =
+  process.env.NODE_ENV === 'production'
+    ? envOrigins.length
+      ? envOrigins
+      : defaultProdOrigins
+    : ['http://localhost:3000']; // development
 
 // Middleware to handle CORS
 app.use(
   cors({
-    // Allow all origins by reflecting the request Origin header
-    // This is compatible with credentials: true
-    origin: true,
+    // Only allow known frontend origins
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -58,7 +62,7 @@ app.use('/api/auth', authRoute);
 
 // Test route
 app.get('/', (req, res) => {
-  res.json({ success: true, message: "Server is running" });
+  res.json({ success: true, message: 'Server is running' });
 });
 
 // Start server
