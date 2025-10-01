@@ -14,7 +14,8 @@ import {
   BookTemplate as Template,
   Users,
 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 // -------------------- Types --------------------
 type Contact = {
@@ -43,29 +44,7 @@ type SheetsData = {
   sheetName: string;
 };
 
-const mockTemplates: TemplateType[] = [
-  {
-    id: 1,
-    name: "Welcome Message",
-    category: "MARKETING",
-    language: "en",
-    status: "APPROVED",
-  },
-  {
-    id: 2,
-    name: "Appointment Reminder",
-    category: "UTILITY",
-    language: "en",
-    status: "APPROVED",
-  },
-  {
-    id: 3,
-    name: "Promotional Offer",
-    category: "MARKETING",
-    language: "en",
-    status: "APPROVED",
-  },
-];
+
 
 type TemplatesType = {
   name: string;
@@ -76,6 +55,24 @@ type TemplatesType = {
 };
 
 const page: React.FC = () => {
+  const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    try {
+      const loggedIn =
+        typeof window !== "undefined" &&
+        localStorage.getItem("wbms_logged_in") === "true";
+      if (!loggedIn) {
+        router.replace("/login");
+      } else {
+        setAuthChecked(true);
+      }
+    } catch {
+      router.replace("/login");
+    }
+  }, [router]);
+
   const [sheetsData, setSheetsData] = useState<SheetsData>({
     sheetId: "",
     sheetUrl: "",
@@ -110,7 +107,7 @@ const page: React.FC = () => {
     templateName: "",
   });
 
-  const [templates] = useState<TemplateType[]>(mockTemplates);
+
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [isLoadingTemplates] = useState(false);
   const [messageMode, setMessageMode] = useState<"template" | "composer">(
@@ -346,7 +343,7 @@ const page: React.FC = () => {
   };
 
   // -------------------- JSX --------------------
-  return (
+  return authChecked ? (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
@@ -853,7 +850,7 @@ const page: React.FC = () => {
         </div>
       )}
     </div>
-  );
+  ) : null;
 };
 
 export default page;

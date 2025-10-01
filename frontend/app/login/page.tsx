@@ -1,16 +1,36 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { MessageSquare, Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 function App() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
+
+  // If already logged in, redirect away from /login
+  useEffect(() => {
+    try {
+      const loggedIn =
+        typeof window !== "undefined" &&
+        localStorage.getItem("wbms_logged_in") === "true";
+      if (loggedIn) {
+        router.replace("/");
+      } else {
+        setMounted(true);
+      }
+    } catch {
+      setMounted(true);
+    }
+  }, [router]);
+
+  // Don't render until we've checked login state
+  if (!mounted) return null;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -26,29 +46,29 @@ function App() {
     // Handle login logic here
 
     try {
-      const res = await fetch(
-        process.env.NEXT_PUBLIC_BACKEND_URL + "/api/auth/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(formData),
-          credentials: "include",
-        }
-      );
-
-      console.log(res,"res");
-      const data = await res.json();
-
-      console.log(data,'DATA');
-      
-      if (data.success) {
-        toast.success(data.message);
-        router.push("/");
-      } else {
-        toast.error(data.message);
+      // Basic client-side auth: save credentials locally
+      const { email, password } = formData;
+      if (!email || !password) {
+        toast.error("Email and password are required");
+        return;
       }
+
+      // Validate against required credentials
+      const validEmail = "satyendratandan3921@gmail.com";
+      const validPassword = "satyendra@botivate.in@8871527519";
+      const isValid = email === validEmail && password === validPassword;
+
+      if (!isValid) {
+        toast.error("Invalid credentials");
+        return;
+      }
+
+      // Persist to localStorage (non-secure; per request)
+      localStorage.setItem("wbms_user", JSON.stringify({ email, password }));
+      localStorage.setItem("wbms_logged_in", "true");
+
+      toast.success("Login successful");
+      router.push("/");
     } catch (error) {
       
       if (error instanceof Error) {

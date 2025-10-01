@@ -2,7 +2,6 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import whatsappRoute from './routes/whatsapp.messages.route.js';
-import authRoute from './routes/auth.route.js';
 import cors from 'cors';
 
 dotenv.config();
@@ -66,18 +65,8 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(cookieParser());
 
-// Basic request logger for auth endpoints (must be before the route)
-app.use('/api/auth', (req, _res, next) => {
-  console.log(`[AUTH] ${req.method} ${req.originalUrl}`, {
-    origin: req.headers.origin,
-    cookies: Object.keys(req.cookies || {}),
-  });
-  next();
-});
-
 // Routes
 app.use('/api/messages', whatsappRoute);
-app.use('/api/auth', authRoute);
 
 // Test route
 app.get('/', (req, res) => {
