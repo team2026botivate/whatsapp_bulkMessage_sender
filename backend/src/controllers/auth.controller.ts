@@ -23,9 +23,7 @@ export const login = (req: Request, res: Response) => {
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 24 * 60 * 60 * 1000,
         path: '/',
-        ...(process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN
-          ? { domain: process.env.COOKIE_DOMAIN }
-          : {}),
+        domain: process.env.FRONT_END_URL
       })
       .status(200)
       .json({ success: true, message: 'Login successful' });
