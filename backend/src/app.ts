@@ -8,52 +8,27 @@ dotenv.config();
 
 const app = express();
 // Trust first proxy (needed for secure cookies behind proxies/CDNs)
-app.set('trust proxy', 1);
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://whatsapp-bulk-message-sender-brown.vercel.app"
+];
 
-// Allowed frontend origins
-const normalizeOrigin = (s: string) => s.trim().replace(/\/$/, '').toLowerCase();
-const envOrigins = (process.env.FRONT_END_URLS || process.env.FRONT_END_URL || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean)
-  .map(normalizeOrigin);
-
-// Fallback defaults for production if env not set
-const defaultProdOrigins = [
-  'https://whatsapp-bulk-message-sender-brown.vercel.app',
-  'https://whatsapp-bulk-message-sender-26ome4p8k.vercel.app',
-  "https://whatsapp-bulk-message-sender-brown.vercel.app/login",
-
-].map(normalizeOrigin);
-
-// Build a union of env-provided, defaults, and localhost (do not rely solely on NODE_ENV)
-const allowedOrigins = Array.from(
-  new Set([
-    ...defaultProdOrigins,
-    ...envOrigins,
-    normalizeOrigin('http://localhost:3000'),
-  ])
-);
-
-
-console.log('Allowed CORS origins:', allowedOrigins);
 app.use(
   cors({
-    // Only allow known frontend origins
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // allow non-browser tools
-      const normalized = normalizeOrigin(origin);
-      const allowed = allowedOrigins.includes(normalized);
-      if (allowed) return callback(null, true);
-      // Do not error; respond without CORS headers so browser blocks instead of 500
-      return callback(null, false);
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    optionsSuccessStatus: 204,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+app.set('trust proxy', 1);
 
 // Ensure caches respect per-origin responses
 app.use((req, res, next) => {
