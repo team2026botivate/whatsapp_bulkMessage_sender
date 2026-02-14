@@ -3,13 +3,12 @@ import axiosInstance from '../utils/axios.js';
 import axios from 'axios';
 
 export const whatsappSendTemplateMessage = async (req: Request, res: Response) => {
-  
-
-  const { contacts, templateId, templateName, templateLanguage } = req.body as {
+  const { contacts, templateId, templateName, templateLanguage, components } = req.body as {
     contacts: Array<{ phone: string; name?: string }>;
     templateId?: string;
     templateName: string;
     templateLanguage?: string;
+    components?: any[];
   };
 
   if (!Array.isArray(contacts) || contacts.length === 0) {
@@ -39,30 +38,74 @@ export const whatsappSendTemplateMessage = async (req: Request, res: Response) =
     return res.status(500).json({ success: false, error: 'WhatsApp API config missing' });
   }
 
-  const buildPayload = (to: string) => ({
-    messaging_product: 'whatsapp',
-    to: `91${to}`,
-    type: 'template',
-    template: {
-      name: templateName,
-      language: {
-        policy: 'deterministic',
-        code: templateLanguage || 'en_US',
-      },
+  const buildPayload = (to: string) => {
+    // Dynamic components construction
+    let finalComponents = components || [];
 
-      components: [
-        {
-          type: 'body',
-          parameters: [
-            {
-              type: 'text',
-              text: contacts.find((contact) => contact.phone === to)?.name || 'satandra',
-            },
-          ],
+    // If no components provided but we have contacts, and it's a legacy call relying on the hardcoded logic (optional compatibility)
+    // We strictly follow the new 'components' param. If it's missing, we send NO components.
+    // However, we need to replace variable placeholders with actual contact data.
+
+    // Deep clone components to avoid mutating the original reference if we were reusing it
+    const localizedComponents = finalComponents.map((comp: any) => {
+      // Logic to replace variables with contact data would go here
+      // For now, we assume the frontend passes the raw structure or we implement basic variable substitution if needed.
+      // But a better approach is: The frontend sends the *structure* of components, and we inject values.
+
+      // IF the user passes components that already have values (static), we use them.
+      // IF the user passes components that need substitution (e.g. using a placeholder convention), we handle it.
+
+      // SIMPLE FIX FOR NOW:
+      // If the user provided components, we use them.
+      // We need to inject the specific contact's name if there is a placeholder.
+      // But the current request from UI likely WON'T send components yet.
+
+      // To solve the IMMEDIATE error (0 params expected, 1 sent):
+      // We Default to EMPTY components if none are provided.
+      return comp;
+    });
+
+    // Advanced: If components are provided, we might need to map {{name}} to contact.name
+    // Let's implement a simple replacer: if a parameter text is '{{name}}', replace it.
+    const processedComponents = localizedComponents.map((comp: any) => {
+      if (comp.type === 'body' || comp.type === 'header') {
+        if (comp.parameters) {
+          return {
+            ...comp,
+            parameters: comp.parameters.map((param: any) => {
+              // Only replace placeholders in text-type parameters
+              // Skip image/video/document parameters entirely
+              if (param.type !== 'text') return param;
+
+              if (param.text === '{{name}}') {
+                return { ...param, text: contacts.find((c) => c.phone === to)?.name || '' };
+              }
+              if (param.text === '{{phone}}') {
+                return { ...param, text: to };
+              }
+              // Any other text (custom text) passes through as-is
+              return param;
+            }),
+          };
+        }
+      }
+      return comp;
+    });
+
+    return {
+      messaging_product: 'whatsapp',
+      to: `91${to}`,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: {
+          policy: 'deterministic',
+          code: templateLanguage || 'en_US',
         },
-      ],
-    },
-  });
+        components: processedComponents,
+      },
+    };
+  };
 
   const sendOnce = async (to: string) => {
     const payload = buildPayload(to);
