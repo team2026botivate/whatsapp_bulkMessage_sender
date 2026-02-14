@@ -1,12 +1,14 @@
 import express, { Router } from 'express';
-import { getWhatsappTemplates, whatsappSendTemplateMessage } from '../controllers/whatsapp.messages.controller.js';
+import {
+  getWhatsappTemplates,
+  whatsappSendTemplateMessage,
+  getJobStatus,
+} from '../controllers/whatsapp.messages.controller.js';
 
-const router: Router = express.Router(); // ✅ fix spelling
-
-// Ensure CORS headers for all message routes (esp. GET /templates)
-
+const router: Router = express.Router();
 
 router.post('/template-message', whatsappSendTemplateMessage);
 router.get('/templates', getWhatsappTemplates);
+router.get('/job/:jobId', getJobStatus);
 
 export default router;

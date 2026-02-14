@@ -18,7 +18,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 // -------------------- Types --------------------
@@ -140,6 +140,59 @@ const page: React.FC = () => {
     type: "",
   });
   const [isSending, setIsSending] = useState(false);
+
+  // Job tracking state
+  type JobResult = {
+    phone: string;
+    name: string;
+    status: "pending" | "sent" | "failed";
+    error?: string;
+    whatsappMessageId?: string;
+    timestamp?: string;
+  };
+  type JobData = {
+    id: string;
+    status: "running" | "completed";
+    totalContacts: number;
+    sent: number;
+    failed: number;
+    pending: number;
+    results: JobResult[];
+  };
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobData, setJobData] = useState<JobData | null>(null);
+  const [showResults, setShowResults] = useState(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Poll job status
+  const pollJobStatus = useCallback(async (jobId: string) => {
+    try {
+      const res = await axios.get(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/messages/job/${jobId}`,
+      );
+      if (res.data.success) {
+        setJobData(res.data.job);
+        if (res.data.job.status === "completed") {
+          // Stop polling
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+          setIsSending(false);
+          setActiveJobId(null);
+        }
+      }
+    } catch (err) {
+      console.error("Poll error:", err);
+    }
+  }, []);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
   const [sendLimit, setSendLimit] = useState<number>(500);
 
   // -------------------- Helpers --------------------
@@ -443,17 +496,44 @@ const page: React.FC = () => {
 
       if (!res.data.success) {
         showToast(res.data.error, "error");
+        setIsSending(false);
         return;
       }
 
-      showToast(
-        res.data.message ||
-          `Successfully queued messages to ${limitedContacts.length} contacts`,
-      );
+      // Start job tracking
+      const jobId = res.data.jobId;
+      if (jobId) {
+        setActiveJobId(jobId);
+        setShowResults(true);
+        setJobData({
+          id: jobId,
+          status: "running",
+          totalContacts: limitedContacts.length,
+          sent: 0,
+          failed: 0,
+          pending: limitedContacts.length,
+          results: [],
+        });
+
+        // Start polling every 2 seconds
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = setInterval(() => pollJobStatus(jobId), 2000);
+        // Also poll immediately
+        pollJobStatus(jobId);
+
+        showToast(
+          `Sending messages to ${limitedContacts.length} contacts... Track progress below.`,
+        );
+      } else {
+        showToast(
+          res.data.message ||
+            `Successfully queued messages to ${limitedContacts.length} contacts`,
+        );
+        setIsSending(false);
+      }
     } catch (error: any) {
       console.error("Send error:", error);
       showToast(error.message || "Failed to send messages", "error");
-    } finally {
       setIsSending(false);
     }
   };
@@ -1024,6 +1104,143 @@ const page: React.FC = () => {
                 )}
             </div>
           </div>
+
+          {/* Send Results Panel */}
+          {showResults && jobData && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-6 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                    {jobData.status === "running" ? (
+                      <Loader className="w-5 h-5 mr-2 animate-spin text-blue-500" />
+                    ) : (
+                      <CheckCircle className="w-5 h-5 mr-2 text-green-500" />
+                    )}
+                    Send Results
+                  </h2>
+                  <button
+                    onClick={() => setShowResults(false)}
+                    className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                  <div className="flex h-3 rounded-full overflow-hidden">
+                    <div
+                      className="bg-green-500 transition-all duration-500"
+                      style={{
+                        width: `${jobData.totalContacts > 0 ? (jobData.sent / jobData.totalContacts) * 100 : 0}%`,
+                      }}
+                    />
+                    <div
+                      className="bg-red-500 transition-all duration-500"
+                      style={{
+                        width: `${jobData.totalContacts > 0 ? (jobData.failed / jobData.totalContacts) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Stats cards */}
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  <div className="bg-gray-50 p-3 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {jobData.totalContacts}
+                    </p>
+                    <p className="text-xs text-gray-500">Total</p>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-green-600">
+                      {jobData.sent}
+                    </p>
+                    <p className="text-xs text-green-600">Sent ✓</p>
+                  </div>
+                  <div className="bg-red-50 p-3 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-red-600">
+                      {jobData.failed}
+                    </p>
+                    <p className="text-xs text-red-600">Failed ✗</p>
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-blue-600">
+                      {jobData.pending}
+                    </p>
+                    <p className="text-xs text-blue-600">Pending</p>
+                  </div>
+                </div>
+
+                {/* Status label */}
+                <p className="text-sm text-gray-600">
+                  {jobData.status === "running" ? (
+                    <span className="text-blue-600 font-medium">
+                      ⏳ Sending in progress...
+                    </span>
+                  ) : (
+                    <span className="text-green-600 font-medium">
+                      ✅ All messages processed!
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {/* Per-contact results table */}
+              {jobData.results.length > 0 && (
+                <div className="max-h-80 overflow-y-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          Name
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          Phone
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          Status
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          Details
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {jobData.results.map((r, i) => (
+                        <tr key={i} className="text-sm">
+                          <td className="px-4 py-2 text-gray-800">
+                            {r.name || "-"}
+                          </td>
+                          <td className="px-4 py-2 text-gray-600">{r.phone}</td>
+                          <td className="px-4 py-2">
+                            {r.status === "sent" && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                ✓ Sent
+                              </span>
+                            )}
+                            {r.status === "failed" && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                ✗ Failed
+                              </span>
+                            )}
+                            {r.status === "pending" && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                ⏳ Pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-xs text-gray-500 max-w-xs truncate">
+                            {r.error || r.whatsappMessageId || "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Sidebar */}
           <div className="xl:col-span-1">

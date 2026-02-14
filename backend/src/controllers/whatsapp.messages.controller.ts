@@ -1,7 +1,44 @@
 import type { Request, Response } from 'express';
 import axiosInstance from '../utils/axios.js';
 import axios from 'axios';
+import crypto from 'crypto';
 
+// ==================== Job Tracker ====================
+type ContactResult = {
+  phone: string;
+  name: string;
+  status: 'pending' | 'sent' | 'failed';
+  error?: string;
+  whatsappMessageId?: string;
+  timestamp?: string;
+};
+
+type Job = {
+  id: string;
+  status: 'running' | 'completed';
+  totalContacts: number;
+  sent: number;
+  failed: number;
+  pending: number;
+  results: ContactResult[];
+  createdAt: string;
+  completedAt?: string;
+};
+
+// In-memory store (keeps last 50 jobs, auto-cleans older ones)
+const jobStore = new Map<string, Job>();
+const MAX_JOBS = 50;
+
+const cleanupOldJobs = () => {
+  if (jobStore.size > MAX_JOBS) {
+    const entries = [...jobStore.entries()];
+    entries.sort((a, b) => new Date(a[1].createdAt).getTime() - new Date(b[1].createdAt).getTime());
+    const toRemove = entries.slice(0, entries.length - MAX_JOBS);
+    toRemove.forEach(([key]) => jobStore.delete(key));
+  }
+};
+
+// ==================== Send Template Message ====================
 export const whatsappSendTemplateMessage = async (req: Request, res: Response) => {
   const { contacts, templateId, templateName, templateLanguage, components } = req.body as {
     contacts: Array<{ phone: string; name?: string }>;
@@ -19,9 +56,9 @@ export const whatsappSendTemplateMessage = async (req: Request, res: Response) =
   }
 
   const BATCH_SIZE = Number(process.env.SEND_BATCH_SIZE ?? 50);
-  const PER_MESSAGE_MIN_DELAY_MS = Number(process.env.SEND_MIN_DELAY_MS ?? 1200); // 1.2s
-  const PER_MESSAGE_MAX_DELAY_MS = Number(process.env.SEND_MAX_DELAY_MS ?? 2400); // 2.4s
-  const BETWEEN_BATCH_DELAY_MS = Number(process.env.SEND_BATCH_DELAY_MS ?? 10000); // 10s
+  const PER_MESSAGE_MIN_DELAY_MS = Number(process.env.SEND_MIN_DELAY_MS ?? 1200);
+  const PER_MESSAGE_MAX_DELAY_MS = Number(process.env.SEND_MAX_DELAY_MS ?? 2400);
+  const BETWEEN_BATCH_DELAY_MS = Number(process.env.SEND_BATCH_DELAY_MS ?? 10000);
   const MAX_RETRIES = 2;
 
   const jitter = (min: number, max: number) => Math.floor(min + Math.random() * (max - min));
@@ -38,43 +75,34 @@ export const whatsappSendTemplateMessage = async (req: Request, res: Response) =
     return res.status(500).json({ success: false, error: 'WhatsApp API config missing' });
   }
 
+  // Create job
+  const jobId = crypto.randomUUID();
+  const job: Job = {
+    id: jobId,
+    status: 'running',
+    totalContacts: contacts.length,
+    sent: 0,
+    failed: 0,
+    pending: contacts.length,
+    results: contacts.map((c) => ({
+      phone: String(c.phone || '').replace(/[^\d+]/g, ''),
+      name: c.name || '',
+      status: 'pending' as const,
+    })),
+    createdAt: new Date().toISOString(),
+  };
+  jobStore.set(jobId, job);
+  cleanupOldJobs();
+
   const buildPayload = (to: string) => {
-    // Dynamic components construction
     let finalComponents = components || [];
 
-    // If no components provided but we have contacts, and it's a legacy call relying on the hardcoded logic (optional compatibility)
-    // We strictly follow the new 'components' param. If it's missing, we send NO components.
-    // However, we need to replace variable placeholders with actual contact data.
-
-    // Deep clone components to avoid mutating the original reference if we were reusing it
-    const localizedComponents = finalComponents.map((comp: any) => {
-      // Logic to replace variables with contact data would go here
-      // For now, we assume the frontend passes the raw structure or we implement basic variable substitution if needed.
-      // But a better approach is: The frontend sends the *structure* of components, and we inject values.
-
-      // IF the user passes components that already have values (static), we use them.
-      // IF the user passes components that need substitution (e.g. using a placeholder convention), we handle it.
-
-      // SIMPLE FIX FOR NOW:
-      // If the user provided components, we use them.
-      // We need to inject the specific contact's name if there is a placeholder.
-      // But the current request from UI likely WON'T send components yet.
-
-      // To solve the IMMEDIATE error (0 params expected, 1 sent):
-      // We Default to EMPTY components if none are provided.
-      return comp;
-    });
-
-    // Advanced: If components are provided, we might need to map {{name}} to contact.name
-    // Let's implement a simple replacer: if a parameter text is '{{name}}', replace it.
-    const processedComponents = localizedComponents.map((comp: any) => {
+    const processedComponents = finalComponents.map((comp: any) => {
       if (comp.type === 'body' || comp.type === 'header') {
         if (comp.parameters) {
           return {
             ...comp,
             parameters: comp.parameters.map((param: any) => {
-              // Only replace placeholders in text-type parameters
-              // Skip image/video/document parameters entirely
               if (param.type !== 'text') return param;
 
               if (param.text === '{{name}}') {
@@ -83,7 +111,6 @@ export const whatsappSendTemplateMessage = async (req: Request, res: Response) =
               if (param.text === '{{phone}}') {
                 return { ...param, text: to };
               }
-              // Any other text (custom text) passes through as-is
               return param;
             }),
           };
@@ -119,7 +146,6 @@ export const whatsappSendTemplateMessage = async (req: Request, res: Response) =
       data: payload,
       timeout: 30000,
     });
-
     return data;
   };
 
@@ -130,31 +156,62 @@ export const whatsappSendTemplateMessage = async (req: Request, res: Response) =
         return await sendOnce(to);
       } catch (err: any) {
         const status = err?.response?.status;
-        // Backoff for rate limits or transient errors
         if (status === 429 || (status >= 500 && status < 600)) {
           const backoff = Math.min(30000, 1000 * Math.pow(2, attempt));
           await sleep(backoff + jitter(0, 500));
           attempt++;
           continue;
         }
-        // Non-retryable error
         throw err;
       }
     }
     throw new Error('Max retries reached');
   };
 
+  // Background sending with tracking
   (async () => {
     const batches = chunk(contacts, BATCH_SIZE);
     for (let b = 0; b < batches.length; b++) {
       const batch = batches[b];
       for (const contact of batch) {
         const to = String(contact.phone || '').replace(/[^\d+]/g, '');
-        if (!to) continue;
+        if (!to) {
+          // Mark as failed - invalid phone
+          const resultItem = job.results.find((r) => r.phone === to || r.phone === '');
+          if (resultItem) {
+            resultItem.status = 'failed';
+            resultItem.error = 'Invalid phone number';
+            resultItem.timestamp = new Date().toISOString();
+            job.failed++;
+            job.pending--;
+          }
+          continue;
+        }
+
+        const resultItem = job.results.find((r) => r.phone === to && r.status === 'pending');
         try {
-          await sendWithRetry(to);
+          const apiResponse = await sendWithRetry(to);
+          if (resultItem) {
+            resultItem.status = 'sent';
+            resultItem.whatsappMessageId = apiResponse?.messages?.[0]?.id || '';
+            resultItem.timestamp = new Date().toISOString();
+            job.sent++;
+            job.pending--;
+          }
         } catch (e: any) {
-          console.error('Failed to send to', to, e?.response?.data ?? e?.message ?? String(e));
+          const errorMsg =
+            e?.response?.data?.error?.message ||
+            e?.response?.data?.error?.error_data?.details ||
+            e?.message ||
+            'Unknown error';
+          console.error('Failed to send to', to, errorMsg);
+          if (resultItem) {
+            resultItem.status = 'failed';
+            resultItem.error = errorMsg;
+            resultItem.timestamp = new Date().toISOString();
+            job.failed++;
+            job.pending--;
+          }
         }
         await sleep(jitter(PER_MESSAGE_MIN_DELAY_MS, PER_MESSAGE_MAX_DELAY_MS));
       }
@@ -162,13 +219,50 @@ export const whatsappSendTemplateMessage = async (req: Request, res: Response) =
         await sleep(BETWEEN_BATCH_DELAY_MS);
       }
     }
-  })().catch((e: any) =>
-    console.error('Background send error:', e?.response?.data ?? e?.message ?? String(e))
-  );
+    job.status = 'completed';
+    job.completedAt = new Date().toISOString();
+    console.log(`Job ${jobId} completed: ${job.sent} sent, ${job.failed} failed`);
+  })().catch((e: any) => {
+    console.error('Background send error:', e?.response?.data ?? e?.message ?? String(e));
+    job.status = 'completed';
+    job.completedAt = new Date().toISOString();
+  });
 
-  return res.status(200).json({ success: true, message: 'Messages queued for sending' });
+  // Return job ID immediately
+  return res.status(200).json({
+    success: true,
+    message: 'Messages queued for sending',
+    jobId,
+    totalContacts: contacts.length,
+  });
 };
 
+// ==================== Get Job Status ====================
+export const getJobStatus = async (req: Request, res: Response) => {
+  const { jobId } = req.params;
+  const job = jobStore.get(jobId);
+
+  if (!job) {
+    return res.status(404).json({ success: false, error: 'Job not found' });
+  }
+
+  return res.status(200).json({
+    success: true,
+    job: {
+      id: job.id,
+      status: job.status,
+      totalContacts: job.totalContacts,
+      sent: job.sent,
+      failed: job.failed,
+      pending: job.pending,
+      createdAt: job.createdAt,
+      completedAt: job.completedAt,
+      results: job.results,
+    },
+  });
+};
+
+// ==================== Get Templates ====================
 export const getWhatsappTemplates = async (req: Request, res: Response) => {
   try {
     if (!process.env.WHATSAPP_BUSSINESS_ACCOUNT_BASE_URL || !process.env.WHATSAPP_ACCESS_TOKEN) {
@@ -176,7 +270,6 @@ export const getWhatsappTemplates = async (req: Request, res: Response) => {
     }
     const { data } = await axiosInstance({
       method: 'GET',
-
       url: `${process.env.WHATSAPP_BUSSINESS_ACCOUNT_BASE_URL}/682293507566285/message_templates?access_token=${process.env.WHATSAPP_ACCESS_TOKEN}`,
     });
 
